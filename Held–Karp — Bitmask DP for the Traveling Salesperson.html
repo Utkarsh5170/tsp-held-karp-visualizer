@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Held–Karp — Bitmask DP for the Traveling Salesperson</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-base:#0A0E13;
+    --bg-panel:#121821;
+    --bg-panel-2:#0E141C;
+    --bg-cell:#161E29;
+    --line:#243040;
+    --line-soft:#1A2330;
+    --text-hi:#EAF0F6;
+    --text-mid:#93A4B8;
+    --text-dim:#546376;
+    --amber:#F2A73C;
+    --amber-glow:rgba(242,167,60,0.55);
+    --teal:#57D6C4;
+    --teal-glow:rgba(87,214,196,0.5);
+    --violet:#B48CF2;
+    --violet-glow:rgba(180,140,242,0.55);
+    --red:#E8607A;
+    --radius:10px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 12% -10%, rgba(87,214,196,0.06), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(242,167,60,0.05), transparent 55%),
+      var(--bg-base);
+    color:var(--text-hi);
+    font-family:var(--font-display);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  .app{max-width:1320px;margin:0 auto;padding:20px 20px 40px;}
+
+  /* ---------- Header ---------- */
+  .topbar{
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px;
+    border-bottom:1px solid var(--line); padding-bottom:18px; margin-bottom:20px;
+  }
+  .brand{display:flex; align-items:center; gap:16px;}
+  .brand-bits{display:flex; gap:5px;}
+  .brand-bit{
+    width:14px; height:14px; border-radius:50%;
+    border:1.5px solid var(--line);
+    background:var(--bg-cell);
+    animation: bitcycle 3.2s infinite;
+  }
+  .brand-bit:nth-child(1){animation-delay:0s;}
+  .brand-bit:nth-child(2){animation-delay:0.35s;}
+  .brand-bit:nth-child(3){animation-delay:0.7s;}
+  .brand-bit:nth-child(4){animation-delay:1.05s;}
+  .brand-bit:nth-child(5){animation-delay:1.4s;}
+  @keyframes bitcycle{
+    0%{background:var(--bg-cell); border-color:var(--line); box-shadow:none;}
+    12%{background:var(--amber); border-color:var(--amber); box-shadow:0 0 10px var(--amber-glow);}
+    45%{background:var(--amber); border-color:var(--amber); box-shadow:0 0 10px var(--amber-glow);}
+    60%{background:var(--bg-cell); border-color:var(--line); box-shadow:none;}
+    100%{background:var(--bg-cell); border-color:var(--line); box-shadow:none;}
+  }
+  .titles h1{
+    font-size:22px; margin:0 0 2px; font-weight:600; letter-spacing:-0.01em;
+  }
+  .titles p{margin:0; font-size:12.5px; color:var(--text-mid); font-family:var(--font-mono);}
+  .titles p .eq{color:var(--teal);}
+
+  .config{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .config label{
+    font-family:var(--font-mono); font-size:11px; color:var(--text-mid);
+    display:flex; align-items:center; gap:6px; text-transform:uppercase; letter-spacing:0.06em;
+  }
+  select, .btn{
+    background:var(--bg-cell); color:var(--text-hi); border:1px solid var(--line);
+    border-radius:7px; padding:7px 11px; font-family:var(--font-mono); font-size:12.5px;
+    cursor:pointer; transition:border-color .15s, background .15s;
+  }
+  select:hover, .btn:hover{border-color:var(--teal); background:#182131;}
+  select:focus-visible, .btn:focus-visible, input:focus-visible, button:focus-visible{
+    outline:2px solid var(--teal); outline-offset:2px;
+  }
+  .btn.primary{background:linear-gradient(180deg,#F2A73C,#DB8E27); color:#1B1206; border-color:#DB8E27; font-weight:600;}
+  .btn.primary:hover{filter:brightness(1.08);}
+  .btn:disabled{opacity:0.35; cursor:not-allowed;}
+
+  /* ---------- Workspace ---------- */
+  .workspace{
+    display:grid; grid-template-columns: minmax(0,0.92fr) minmax(0,1.18fr); gap:16px;
+  }
+  @media (max-width: 920px){ .workspace{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; display:flex; flex-direction:column; min-width:0;
+  }
+  .panel h2{
+    font-size:12px; margin:0 0 12px; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--text-mid); font-weight:600; font-family:var(--font-mono);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .panel h2 .tag{
+    font-size:10.5px; padding:2px 7px; border-radius:20px; border:1px solid var(--line);
+    color:var(--text-dim); text-transform:none; letter-spacing:0;
+  }
+
+  /* ---------- Graph panel ---------- */
+  #graphCanvas{width:100%; aspect-ratio:560/320; display:block; border-radius:8px; background:var(--bg-panel-2);}
+  .graph-readout{
+    margin-top:12px; padding:10px 12px; background:var(--bg-panel-2); border:1px solid var(--line-soft);
+    border-radius:8px; font-family:var(--font-mono); font-size:12px; color:var(--text-mid); min-height:20px;
+    line-height:1.6;
+  }
+  .graph-readout b{color:var(--text-hi); font-weight:600;}
+  .graph-readout .hi-teal{color:var(--teal);}
+  .graph-readout .hi-amber{color:var(--amber);}
+  .graph-readout .hi-violet{color:var(--violet);}
+
+  /* ---------- Table panel ---------- */
+  .table-scroll{
+    position:relative; overflow:auto; border:1px solid var(--line-soft); border-radius:8px;
+    background:var(--bg-panel-2); max-height:420px;
+  }
+  table#dpTable{border-collapse:collapse; font-family:var(--font-mono); font-size:12px; position:relative;}
+  #dpTable th, #dpTable td{
+    border-bottom:1px solid var(--line-soft); border-right:1px solid var(--line-soft);
+    padding:0; text-align:center; white-space:nowrap;
+  }
+  #dpTable thead th{
+    position:sticky; top:0; background:#0F1620; z-index:3; color:var(--text-mid);
+    font-weight:600; padding:8px 12px; font-size:11px; border-bottom:1px solid var(--line);
+  }
+  #dpTable thead th.corner{ position:sticky; left:0; top:0; z-index:4; background:#0F1620; text-align:left; padding-left:12px;}
+  #dpTable tbody th{
+    position:sticky; left:0; background:#0F1620; z-index:2; text-align:left; padding:6px 10px;
+    font-weight:400; border-right:1px solid var(--line);
+  }
+  .row-bits{display:flex; align-items:center; gap:7px;}
+  .bit-strip{display:flex; gap:3px;}
+  .bit-led{
+    width:9px; height:9px; border-radius:50%; border:1.3px solid var(--line);
+    background:transparent; flex:none;
+  }
+  .bit-led.on{background:var(--teal); border-color:var(--teal); box-shadow:0 0 4px var(--teal-glow);}
+  .bit-led.on.cur{background:var(--amber); border-color:var(--amber); box-shadow:0 0 6px var(--amber-glow);}
+  .row-mask-dec{color:var(--text-dim); font-size:10px;}
+
+  .dp-cell{
+    width:64px; height:38px; position:relative; color:var(--text-dim); transition:background .2s, color .2s;
+  }
+  .dp-cell.na{background:repeating-linear-gradient(135deg, var(--bg-cell) 0 6px, var(--bg-panel-2) 6px 12px); color:var(--text-dim); opacity:0.5;}
+  .dp-cell.pending{color:var(--text-dim);}
+  .dp-cell.filled{color:var(--text-hi); background:var(--bg-cell); font-weight:600; cursor:pointer;}
+  .dp-cell.filled:hover{outline:1px solid var(--teal); outline-offset:-1px;}
+  .dp-cell.active{background:rgba(242,167,60,0.16); color:var(--amber); font-weight:700; box-shadow: inset 0 0 0 2px var(--amber);}
+  .dp-cell.source{background:rgba(87,214,196,0.14); box-shadow: inset 0 0 0 2px var(--teal);}
+  .dp-cell.onroute{box-shadow: inset 0 0 0 2px var(--violet); color:var(--violet); background:rgba(180,140,242,0.14);}
+  .cell-val{position:relative; z-index:1;}
+
+  #arrowSvg{position:absolute; top:0; left:0; pointer-events:none; z-index:5;}
+  #arrowSvg path{fill:none; stroke:var(--teal); stroke-width:2; opacity:0.9;}
+  #arrowSvg path.chosen{stroke:var(--amber); stroke-width:2.4;}
+  #arrowSvg path.dashed{stroke-dasharray:3 3; opacity:0.55;}
+
+  /* ---------- Explain / formula panel ---------- */
+  .explain-panel{
+    margin-top:14px; background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 18px;
+  }
+  .formula{font-family:var(--font-mono); font-size:13.5px; line-height:1.9; color:var(--text-mid);}
+  .formula .lhs{color:var(--text-hi); font-weight:600;}
+  .formula .term{
+    display:inline-block; padding:2px 8px; margin:2px 4px; border-radius:6px; border:1px solid var(--line);
+    background:var(--bg-cell); color:var(--text-mid);
+  }
+  .formula .term.winner{border-color:var(--amber); color:var(--amber); background:rgba(242,167,60,0.12); font-weight:600;}
+  .formula .step-caption{display:block; margin-top:8px; color:var(--text-dim); font-size:12px;}
+
+  /* ---------- Transport controls ---------- */
+  .transport{
+    margin-top:14px; background:var(--bg-panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  .transport .grp{display:flex; align-items:center; gap:8px;}
+  .transport input[type=range]{accent-color:var(--teal); width:120px;}
+  #scrubber{flex:1; min-width:140px; accent-color:var(--amber);}
+  .step-counter{
+    font-family:var(--font-mono); font-size:12px; color:var(--text-mid); min-width:96px; text-align:right;
+  }
+  .step-counter b{color:var(--text-hi);}
+  .speed-label{font-family:var(--font-mono); font-size:11px; color:var(--text-dim);}
+
+  footer.legend{
+    margin-top:14px; display:flex; gap:22px; flex-wrap:wrap; font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim);
+  }
+  .legend .lg{display:flex; align-items:center; gap:6px;}
+  .legend .sw{width:10px; height:10px; border-radius:3px; display:inline-block;}
+
+  .plain-label{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--teal);margin-bottom:6px;}
+  .plain{font-size:14px;line-height:1.75;color:var(--text-hi);padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line);}
+  .plain code,.practice code{font-family:var(--font-mono);color:var(--amber);background:var(--bg-cell);padding:1px 6px;border-radius:5px;}
+  .practice{display:none;margin-top:14px;padding:14px;border:1px dashed var(--amber);border-radius:8px;background:rgba(242,167,60,.06);font-size:14px;line-height:1.7;}
+  .practice input[type=number]{width:90px;background:var(--bg-cell);color:var(--text-hi);border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-family:var(--font-mono);font-size:14px;}
+  .pstat{font-family:var(--font-mono);font-size:12px;color:var(--text-mid);margin-bottom:8px;}
+  .pfb{margin-top:8px;font-family:var(--font-mono);font-size:13px;}
+  .pfb.bad{color:var(--red);} .pfb.ok{color:var(--teal);}
+  table.dm{border-collapse:collapse;font-family:var(--font-mono);font-size:12px;margin-top:6px;}
+  table.dm th,table.dm td{border:1px solid var(--line-soft);padding:4px 9px;text-align:center;color:var(--text-mid);}
+  table.dm td.c{background:rgba(87,214,196,.18);color:var(--teal);font-weight:700;}
+  table.dm td.w{background:rgba(242,167,60,.2);color:var(--amber);font-weight:700;}
+  .dm-title{margin-top:12px;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-mid);}
+  .taskbar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 18px;padding:10px 14px;margin:-4px 0 16px;background:rgba(18,24,33,.9);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:var(--radius);}
+  .tb-group{display:flex;align-items:center;flex-wrap:wrap;gap:8px;position:relative;padding-top:15px;}
+  .tb-group+.tb-group{padding-left:18px;border-left:1px solid var(--line);}
+  .tb-group::before{content:attr(data-label);position:absolute;top:0;left:0;font:600 9.5px var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);}
+  .tb-group+.tb-group::before{left:18px;}
+  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  .seg button{background:var(--bg-cell);color:var(--text-mid);border:0;padding:7px 14px;font:500 12.5px var(--font-mono);cursor:pointer;}
+  .seg button.on{background:var(--amber);color:#1B1206;font-weight:700;}
+  .chip{display:flex;align-items:center;gap:5px;font:12px var(--font-mono);color:var(--text-mid);cursor:pointer;}
+  .chip input{accent-color:var(--teal);}
+  .helpbar{margin:-8px 0 16px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg-panel);font:12px/1.8 var(--font-mono);color:var(--text-mid);}
+  .helpbar kbd{background:var(--bg-cell);border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--amber);}
+  body.hide-explain .plain, body.hide-explain .plain-label{display:none;}
+  body.hide-formula #formulaBox{display:none;}
+  body.hide-matrix .dm-title, body.hide-matrix #distMatrix{display:none;}
+  .cmp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:18px;font-family:var(--font-mono);font-size:12.5px;color:var(--text-mid);line-height:1.9;}
+  .cmp-grid b{color:var(--text-hi);}
+  @media (max-width:920px){.cmp-grid{grid-template-columns:1fr;}}
+  @media (prefers-reduced-motion: reduce){
+    .brand-bit{animation:none;}
+    * {scroll-behavior:auto !important;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-bits" id="brandBits" aria-hidden="true"></div>
+      <div class="titles">
+        <h1>Held–Karp Visualizer</h1>
+        <p>Bitmask <span class="eq">dp[mask][city]</span> · exact Traveling&nbsp;Salesperson solver</p>
+      </div>
+    </div>
+    <div class="config">
+      <label>Cities
+        <select id="citySelect">
+          <option value="4">4</option>
+          <option value="5" selected>5</option>
+          <option value="6">6</option>
+        </select>
+      </label>
+      <button class="btn" id="regenBtn">↻ New map</button>
+      <button class="btn primary" id="solveBtn">Rebuild table</button>
+      <button class="btn" id="practiceBtn">✎ Practice mode</button>
+    </div>
+  </header>
+
+  <nav class="taskbar" id="taskbar" aria-label="Toolbar">
+    <div class="tb-group" data-label="Map" id="tbMap"></div>
+    <div class="tb-group" data-label="Mode"><div class="seg"><button id="modeLearn" class="on">Learn</button><button id="modePractice">Practice</button></div></div>
+    <div class="tb-group" data-label="View">
+      <label class="chip"><input type="checkbox" id="vExplain" checked>Explain</label>
+      <label class="chip"><input type="checkbox" id="vFormula" checked>Formula</label>
+      <label class="chip"><input type="checkbox" id="vMatrix" checked>Matrix</label>
+    </div>
+    <div class="tb-group" data-label="Tools">
+      <button class="btn" id="cmpBtn">⚖ Compare</button>
+      <button class="btn" id="copyBtn">⧉ Copy summary</button>
+      <button class="btn" id="helpBtn">? Keys</button>
+    </div>
+  </nav>
+  <div class="helpbar" id="helpBar" style="display:none"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> step back/forward · click any filled table cell to jump to the step that computed it · <kbd>Enter</kbd> submits a practice answer</div>
+  <section class="panel" id="cmpPanel" style="display:none;margin-bottom:16px"><h2>Brute force vs Dynamic Programming <span class="tag">why DP wins</span></h2><div id="cmpBody"></div></section>
+
+  <main class="workspace">
+    <section class="panel graph-panel">
+      <h2>City graph <span class="tag" id="graphTag">start = A</span></h2>
+      <canvas id="graphCanvas"></canvas>
+      <div class="dm-title">Distance matrix (row → column)</div><div id="distMatrix"></div>
+      <div class="graph-readout" id="graphReadout">Press <b>Play</b> to watch the table fill in, one subproblem at a time.</div>
+    </section>
+
+    <section class="panel table-panel">
+      <h2>dp[mask][city] — minimum cost to reach <b>city</b> having visited exactly <b>mask</b> <span class="tag" id="tableTag">0 / 0 filled</span></h2>
+      <div class="table-scroll" id="tableScroll">
+        <table id="dpTable"></table>
+        <svg id="arrowSvg"></svg>
+      </div>
+    </section>
+  </main>
+
+  <section class="explain-panel">
+    <div class="plain-label">In plain English</div><div class="plain" id="narrate"></div>
+    <div class="formula" id="formulaBox">Select <b>New map</b> or press <b>Play</b> to begin filling the table.</div>
+  </section>
+
+  <footer class="transport">
+    <div class="grp">
+      <button class="btn" id="resetBtn" title="Reset to start">⏮</button>
+      <button class="btn" id="prevBtn" title="Previous step">⟨</button>
+      <button class="btn primary" id="playBtn" title="Play / pause">▶ Play</button>
+      <button class="btn" id="nextBtn" title="Next step">⟩</button>
+    </div>
+    <input type="range" id="scrubber" min="0" max="0" value="0" />
+    <div class="step-counter" id="stepCounter">Step <b>0</b> / 0</div>
+    <div class="grp">
+      <span class="speed-label">Speed</span>
+      <input type="range" id="speedSlider" min="1" max="5" value="3" />
+    </div>
+  </footer>
+
+  <footer class="legend">
+    <span class="lg"><span class="sw" style="background:var(--teal)"></span> candidate transition</span>
+    <span class="lg"><span class="sw" style="background:var(--amber)"></span> chosen minimum / current cell</span>
+    <span class="lg"><span class="sw" style="background:var(--violet)"></span> final optimal tour</span>
+    <span class="lg"><span class="sw" style="background:var(--line)"></span> unreachable / not applicable</span>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================= RNG ============================= */
+  function mulberry32(seed){
+    return function(){
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ============================= State ============================= */
+  let n = 5;
+  let cities = [];
+  let dist = [];
+  let steps = [];
+  let stepIndex = 0;
+  let playing = false;
+  let timer = null;
+  let solved = null; // {parent map data as plain object, route, total}
+  let dpFilled = {}; // key "mask_city" -> cost, filled as steps progress
+  let totalValidCells = 0;
+
+  const LABELS = ["A","B","C","D","E","F","G"];
+
+  const els = {
+    citySelect: document.getElementById('citySelect'),
+    regenBtn: document.getElementById('regenBtn'),
+    solveBtn: document.getElementById('solveBtn'),
+    canvas: document.getElementById('graphCanvas'),
+    graphReadout: document.getElementById('graphReadout'),
+    graphTag: document.getElementById('graphTag'),
+    tableTag: document.getElementById('tableTag'),
+    table: document.getElementById('dpTable'),
+    tableScroll: document.getElementById('tableScroll'),
+    svg: document.getElementById('arrowSvg'),
+    formulaBox: document.getElementById('formulaBox'),
+    resetBtn: document.getElementById('resetBtn'),
+    prevBtn: document.getElementById('prevBtn'),
+    nextBtn: document.getElementById('nextBtn'),
+    playBtn: document.getElementById('playBtn'),
+    scrubber: document.getElementById('scrubber'),
+    stepCounter: document.getElementById('stepCounter'),
+    speedSlider: document.getElementById('speedSlider'),
+    brandBits: document.getElementById('brandBits'),
+  };
+
+  /* ============================= Setup: cities & distances ============================= */
+  let seed = Date.now() & 0xffffffff;
+
+  function popcount(x){ let c=0; while(x){ c+=x&1; x>>=1; } return c; }
+
+  function genCities(nn, sd){
+    const rand = mulberry32(sd);
+    const W = 560, H = 320, pad = 46;
+    const pts = [];
+    let tries = 0;
+    while (pts.length < nn && tries < 4000){
+      tries++;
+      const x = pad + rand()*(W-2*pad);
+      const y = pad + rand()*(H-2*pad);
+      let ok = true;
+      for (const p of pts){
+        const dx=p.x-x, dy=p.y-y;
+        if (Math.sqrt(dx*dx+dy*dy) < 70){ ok=false; break; }
+      }
+      if (ok) pts.push({x,y});
+    }
+    while (pts.length < nn){
+      pts.push({x: pad + rand()*(W-2*pad), y: pad + rand()*(H-2*pad)});
+    }
+    return pts.map((p,i)=>({id:i, label:LABELS[i], x:p.x, y:p.y}));
+  }
+
+  function buildDist(cts){
+    const nn = cts.length;
+    const d = [];
+    for (let i=0;i<nn;i++){
+      d.push([]);
+      for (let j=0;j<nn;j++){
+        if (i===j) d[i].push(0);
+        else {
+          const dx=cts[i].x-cts[j].x, dy=cts[i].y-cts[j].y;
+          d[i].push(Math.round(Math.sqrt(dx*dx+dy*dy)/8));
+        }
+      }
+    }
+    return d;
+  }
+
+  /* ============================= Held-Karp with recorded steps ============================= */
+  function computeHeldKarp(nn, d){
+    const FULL = (1<<nn)-1;
+    const key = (mask,city)=> mask+"_"+city;
+    const dp = new Map();
+    const parent = new Map();
+    const stepList = [];
+
+    dp.set(key(1,0), 0);
+    stepList.push({type:'base', mask:1, city:0, cost:0});
+
+    const groups = {};
+    for (let mask=1; mask<=FULL; mask++){
+      if (!(mask & 1)) continue;
+      const pc = popcount(mask);
+      (groups[pc] = groups[pc] || []).push(mask);
+    }
+    const sizes = Object.keys(groups).map(Number).sort((a,b)=>a-b);
+
+    for (const sz of sizes){
+      if (sz === 1) continue;
+      const masksAtSize = groups[sz].sort((a,b)=>a-b);
+      for (const mask of masksAtSize){
+        for (let i=1;i<nn;i++){
+          if (!(mask & (1<<i))) continue;
+          const prevMask = mask ^ (1<<i);
+          const candidates = [];
+          for (let j=0;j<nn;j++){
+            if (j===i) continue;
+            if (!(prevMask & (1<<j))) continue;
+            const prevCost = dp.get(key(prevMask,j));
+            if (prevCost === undefined) continue;
+            candidates.push({ j, prevMask, prevCost, edgeCost: d[j][i], total: prevCost + d[j][i] });
+          }
+          let best = candidates[0];
+          for (const c of candidates) if (c.total < best.total) best = c;
+          dp.set(key(mask,i), best.total);
+          parent.set(key(mask,i), best.j);
+          stepList.push({ type:'compute', mask, city:i, candidates, chosen: best.j, cost: best.total });
+        }
+      }
+    }
+
+    let bestFinal = null;
+    const finalCandidates = [];
+    for (let i=1;i<nn;i++){
+      const c = dp.get(key(FULL,i));
+      if (c === undefined) continue;
+      const total = c + d[i][0];
+      finalCandidates.push({ i, prevCost:c, edgeCost:d[i][0], total });
+      if (!bestFinal || total < bestFinal.total) bestFinal = { i, total };
+    }
+    stepList.push({ type:'close', mask:FULL, candidates: finalCandidates, chosen: bestFinal.i, cost: bestFinal.total });
+
+    // backtrack
+    let mask = FULL, city = bestFinal.i;
+    const path = [city];
+    while (!(mask===1 && city===0)){
+      const j = parent.get(key(mask,city));
+      mask = mask ^ (1<<city);
+      city = j;
+      path.push(city);
+    }
+    path.reverse();
+    const route = [...path, 0];
+    stepList.push({ type:'route', route, total: bestFinal.total });
+
+    return { steps: stepList, route, total: bestFinal.total, parent };
+  }
+
+  /* ============================= Table rendering ============================= */
+  function allRowMasks(nn){
+    const FULL = (1<<nn)-1;
+    const masks = [];
+    for (let m=1; m<=FULL; m++){ if (m & 1) masks.push(m); }
+    masks.sort((a,b)=> popcount(a)-popcount(b) || a-b);
+    return masks;
+  }
+
+  function bitStripHTML(mask, nn, curCity){
+    let html = '<span class="bit-strip">';
+    for (let c=0;c<nn;c++){
+      const on = !!(mask & (1<<c));
+      const isCur = curCity===c;
+      html += '<span class="bit-led '+(on?'on':'')+(isCur&&on?' cur':'')+'" title="'+LABELS[c]+(on?' visited':' not visited')+'"></span>';
+    }
+    html += '</span>';
+    return html;
+  }
+
+  function buildTableSkeleton(){
+    const masks = allRowMasks(n);
+    let thead = '<thead><tr><th class="corner">mask \\ city</th>';
+    for (let c=0;c<n;c++) thead += '<th>'+LABELS[c]+'</th>';
+    thead += '</tr></thead>';
+
+    let tbody = '<tbody>';
+    for (const mask of masks){
+      tbody += '<tr data-mask="'+mask+'">';
+      tbody += '<th><div class="row-bits">'+bitStripHTML(mask,n,-1)+
+                '<span class="row-mask-dec">'+mask.toString(2).padStart(n,'0')+'</span></div></th>';
+      for (let c=0;c<n;c++){
+        const applicable = (mask & (1<<c)) && !(c===0 && mask!==1);
+        tbody += '<td class="dp-cell '+(applicable?'pending':'na')+'" data-mask="'+mask+'" data-city="'+c+'">'+
+                 '<span class="cell-val">'+(applicable?'·':'—')+'</span></td>';
+      }
+      tbody += '</tr>';
+    }
+    tbody += '</tbody>';
+    els.table.innerHTML = thead + tbody;
+
+    // base cell mask=1,city=0 always applicable
+    const baseCell = els.table.querySelector('.dp-cell[data-mask="1"][data-city="0"]');
+    if (baseCell){ baseCell.classList.remove('na'); baseCell.classList.add('pending'); baseCell.querySelector('.cell-val').textContent = '·'; }
+
+    totalValidCells = els.table.querySelectorAll('.dp-cell:not(.na)').length;
+  }
+
+  function cellEl(mask, city){
+    return els.table.querySelector('.dp-cell[data-mask="'+mask+'"][data-city="'+city+'"]');
+  }
+  function rowEl(mask){
+    return els.table.querySelector('tr[data-mask="'+mask+'"]');
+  }
+
+  function clearHighlights(){
+    els.table.querySelectorAll('.dp-cell.active, .dp-cell.source, .dp-cell.onroute').forEach(el=>{
+      el.classList.remove('active','source','onroute');
+    });
+    els.svg.innerHTML = '';
+  }
+
+  function setCellValue(mask, city, val){
+    const el = cellEl(mask, city);
+    if (!el) return;
+    el.classList.remove('pending');
+    el.classList.add('filled');
+    el.querySelector('.cell-val').textContent = val;
+  }
+
+  /* ============================= Arrow drawing ============================= */
+  function sizeSvgToTable(){
+    const w = els.table.scrollWidth, h = els.table.scrollHeight;
+    els.svg.setAttribute('width', w);
+    els.svg.setAttribute('height', h);
+    els.svg.style.width = w+'px';
+    els.svg.style.height = h+'px';
+  }
+
+  function centerOf(el){
+    const tableRect = els.table.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    return { x: r.left - tableRect.left + r.width/2, y: r.top - tableRect.top + r.height/2 };
+  }
+
+  function drawCurve(from, to, cls){
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const midx = from.x + dx*0.5;
+    const midy = from.y + dy*0.5 - Math.max(24, Math.abs(dx)*0.12);
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', 'M '+from.x+' '+from.y+' Q '+midx+' '+midy+' '+to.x+' '+to.y);
+    path.setAttribute('class', cls);
+    path.setAttribute('marker-end', cls.indexOf('chosen')>=0 ? 'url(#arrowHeadAmber)' : 'url(#arrowHeadTeal)');
+    els.svg.appendChild(path);
+  }
+
+  function ensureMarkers(){
+    if (els.svg.querySelector('defs')) return;
+    const ns = 'http://www.w3.org/2000/svg';
+    const defs = document.createElementNS(ns,'defs');
+    function marker(id, color){
+      const m = document.createElementNS(ns,'marker');
+      m.setAttribute('id', id); m.setAttribute('viewBox','0 0 10 10');
+      m.setAttribute('refX','8'); m.setAttribute('refY','5');
+      m.setAttribute('markerWidth','7'); m.setAttribute('markerHeight','7');
+      m.setAttribute('orient','auto-start-reverse');
+      const p = document.createElementNS(ns,'path');
+      p.setAttribute('d','M 0 0 L 10 5 L 0 10 z');
+      p.setAttribute('fill', color);
+      m.appendChild(p);
+      defs.appendChild(m);
+    }
+    marker('arrowHeadTeal', '#57D6C4');
+    marker('arrowHeadAmber', '#F2A73C');
+    els.svg.appendChild(defs);
+  }
+
+  /* ============================= Graph rendering ============================= */
+  const ctx = els.canvas.getContext('2d');
+  function resizeCanvas(){
+    const rect = els.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    els.canvas.width = 560 * dpr;
+    els.canvas.height = 320 * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function drawGraph(opts){
+    opts = opts || {};
+    ctx.clearRect(0,0,560,320);
+
+    // faint full mesh
+    ctx.lineWidth = 1;
+    for (let i=0;i<n;i++){
+      for (let j=i+1;j<n;j++){
+        ctx.strokeStyle = 'rgba(107,128,148,0.14)';
+        ctx.beginPath();
+        ctx.moveTo(cities[i].x, cities[i].y);
+        ctx.lineTo(cities[j].x, cities[j].y);
+        ctx.stroke();
+      }
+    }
+
+    // highlighted candidate edges (teal, dashed) and chosen (amber, solid)
+    if (opts.candidateEdges){
+      for (const e of opts.candidateEdges){
+        ctx.save();
+        ctx.setLineDash(e.chosen ? [] : [5,4]);
+        ctx.strokeStyle = e.chosen ? '#F2A73C' : 'rgba(87,214,196,0.85)';
+        ctx.lineWidth = e.chosen ? 3 : 2;
+        ctx.shadowColor = e.chosen ? 'rgba(242,167,60,0.65)' : 'rgba(87,214,196,0.5)';
+        ctx.shadowBlur = e.chosen ? 12 : 6;
+        ctx.beginPath();
+        ctx.moveTo(cities[e.from].x, cities[e.from].y);
+        ctx.lineTo(cities[e.to].x, cities[e.to].y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // final route (violet)
+    if (opts.route){
+      ctx.save();
+      ctx.strokeStyle = '#B48CF2';
+      ctx.lineWidth = 3.2;
+      ctx.shadowColor = 'rgba(180,140,242,0.65)';
+      ctx.shadowBlur = 10;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let k=0;k<opts.route.length;k++){
+        const c = cities[opts.route[k]];
+        if (k===0) ctx.moveTo(c.x,c.y); else ctx.lineTo(c.x,c.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // nodes
+    for (let i=0;i<n;i++){
+      const c = cities[i];
+      const isMaskMember = opts.mask !== undefined ? !!(opts.mask & (1<<i)) : false;
+      const isCurrent = opts.curCity === i;
+      const isStart = i===0;
+
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, isCurrent ? 15 : 12, 0, Math.PI*2);
+      if (isCurrent){
+        ctx.fillStyle = '#F2A73C';
+        ctx.shadowColor = 'rgba(242,167,60,0.7)'; ctx.shadowBlur = 16;
+      } else if (isMaskMember){
+        ctx.fillStyle = '#1E3A38';
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.fillStyle = '#161E29';
+        ctx.shadowBlur = 0;
+      }
+      ctx.fill();
+      ctx.lineWidth = isStart ? 2.4 : 1.6;
+      ctx.strokeStyle = isStart ? '#57D6C4' : (isMaskMember ? '#57D6C4' : '#3A4A5C');
+      ctx.shadowBlur = 0;
+      ctx.stroke();
+
+      ctx.fillStyle = isCurrent ? '#1B1206' : '#EAF0F6';
+      ctx.font = '600 12px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(c.label, c.x, c.y+0.5);
+    }
+  }
+
+  /* ============================= Step application ============================= */
+  function formatFormula(step){
+    if (!step) return '';
+    if (step.type === 'base'){
+      return '<span class="lhs">dp[{'+LABELS[0]+'}][A]</span> = 0'+
+             '<span class="step-caption">Base case — starting at A having visited only A costs nothing.</span>';
+    }
+    if (step.type === 'compute'){
+      const maskLbl = maskSetLabel(step.mask);
+      const cityLbl = LABELS[step.city];
+      let terms = step.candidates.map(c=>{
+        const prevSet = maskSetLabel(step.mask ^ (1<<step.city));
+        const isWin = c.j === step.chosen;
+        return '<span class="term'+(isWin?' winner':'')+'">dp[{'+prevSet+'}]['+LABELS[c.j]+'] + d('+LABELS[c.j]+','+cityLbl+') = '+c.prevCost+' + '+c.edgeCost+' = '+c.total+'</span>';
+      }).join(' ');
+      return '<span class="lhs">dp[{'+maskLbl+'}]['+cityLbl+']</span> = min('+terms+' ) = <b style="color:var(--amber)">'+step.cost+'</b>'+
+             '<span class="step-caption">Best way to reach '+cityLbl+' after visiting exactly {'+maskLbl+'} — arriving via <b style="color:var(--amber)">'+LABELS[step.chosen]+'</b>.</span>';
+    }
+    if (step.type === 'close'){
+      let terms = step.candidates.map(c=>{
+        const isWin = c.i === step.chosen;
+        return '<span class="term'+(isWin?' winner':'')+'">dp[full]['+LABELS[c.i]+'] + d('+LABELS[c.i]+',A) = '+c.prevCost+' + '+c.edgeCost+' = '+c.total+'</span>';
+      }).join(' ');
+      return '<span class="lhs">Closing the tour</span> = min('+terms+' ) = <b style="color:var(--amber)">'+step.cost+'</b>'+
+             '<span class="step-caption">Every city has been visited — now return to A from whichever city is cheapest.</span>';
+    }
+    if (step.type === 'route'){
+      return '<span class="lhs">Optimal tour</span> = '+step.route.map(i=>LABELS[i]).join(' → ')+
+             ' &nbsp; total distance = <b style="color:var(--violet)">'+step.total+'</b>'+
+             '<span class="step-caption">Reconstructed by following each cell\'s stored predecessor back to the start.</span>';
+    }
+    return '';
+  }
+
+  function maskSetLabel(mask){
+    const arr = [];
+    for (let c=0;c<n;c++) if (mask & (1<<c)) arr.push(LABELS[c]);
+    return arr.join(',');
+  }
+
+  function countFilled(){
+    return els.table.querySelectorAll('.dp-cell.filled').length;
+  }
+
+  function applyStepsUpTo(idx){
+    // rebuild fill state from scratch up to idx (cheap enough for our table sizes)
+    buildTableSkeleton();
+    for (let k=0;k<=idx;k++){
+      const s = steps[k];
+      if (s.type === 'base') setCellValue(1,0,0);
+      else if (s.type === 'compute') setCellValue(s.mask, s.city, s.cost);
+    }
+  }
+
+  function renderStep(idx){
+    clearHighlights();
+    if (idx < 0){
+      drawGraph({});
+      els.formulaBox.innerHTML = 'Press <b>Play</b> or step <b>Next</b> to begin filling the table.';
+      narrateEl.innerHTML = '<b>How to read this:</b> every table cell answers one small question — <i>"what is the cheapest trip that starts at A, visits exactly the cities lit in this row, and ends at this column?"</i> Rows are bitmasks (lit dot = city already visited). Small answers are built first; each bigger answer reuses them instead of re-solving. Press <b>Next</b> or <b>Play</b>, or try <b>Practice mode</b> to compute the cells yourself.'; renderMatrix(null); renderPractice(null,-1,false);
+      els.graphReadout.innerHTML = 'The graph shows every city and, faintly, every possible direct connection.';
+      updateCounters();
+      return;
+    }
+    applyStepsUpTo(idx);
+    const step = steps[idx];
+    const hide = practice.on && step.type==='compute' && !practice.done.has(idx);
+    if (hide){ const hc=cellEl(step.mask,step.city); hc.classList.remove('filled'); hc.classList.add('pending'); hc.querySelector('.cell-val').textContent='?'; }
+    els.formulaBox.innerHTML = hide ? '' : formatFormula(step);
+    narrateEl.innerHTML = hide ? '' : narrate(step);
+    renderPractice(step, idx, hide);
+    renderMatrix(step);
+
+    ensureMarkers();
+    sizeSvgToTable();
+
+    if (step.type === 'base'){
+      const el = cellEl(1,0);
+      if (el) el.classList.add('active');
+      drawGraph({ mask:1, curCity:0 });
+      els.graphReadout.innerHTML = '<b>A</b> is the fixed starting city — every tour begins and ends here.';
+    }
+    else if (step.type === 'compute'){
+      const targetEl = cellEl(step.mask, step.city);
+      if (targetEl) targetEl.classList.add('active');
+      const targetC = targetEl ? centerOf(targetEl) : null;
+      const edges = [];
+      for (const c of step.candidates){
+        const prevMask = step.mask ^ (1<<step.city);
+        const srcEl = cellEl(prevMask, c.j);
+        if (srcEl){
+          srcEl.classList.add('source');
+          const srcC = centerOf(srcEl);
+          if (targetC) drawCurve(srcC, targetC, (c.j===step.chosen && !hide) ? 'chosen' : 'dashed');
+        }
+        edges.push({ from: c.j, to: step.city, chosen: c.j === step.chosen && !hide });
+      }
+      drawGraph({ mask: step.mask, curCity: step.city, candidateEdges: edges });
+      const chosenLbl = LABELS[step.chosen];
+      els.graphReadout.innerHTML = 'Evaluating every city already in the subset as a possible last stop before <b class="hi-amber">'+LABELS[step.city]+'</b>.'+(hide?' Which one is cheapest? You decide.':' Cheapest arrival is via <b class="hi-amber">'+chosenLbl+'</b>.');
+    }
+    else if (step.type === 'close'){
+      const full = step.mask;
+      const edges = [];
+      for (const c of step.candidates){
+        const srcEl = cellEl(full, c.i);
+        if (srcEl) srcEl.classList.add(c.i===step.chosen ? 'active' : 'source');
+        edges.push({ from: c.i, to: 0, chosen: c.i === step.chosen });
+      }
+      drawGraph({ mask: full, curCity: -1, candidateEdges: edges });
+      els.graphReadout.innerHTML = 'All cities visited. Comparing the cost of returning to <b>A</b> from each possible final city.';
+    }
+    else if (step.type === 'route'){
+      // highlight cells on the optimal path
+      let mask = (1<<n)-1;
+      for (let k=step.route.length-2; k>=1; k--){
+        const city = step.route[k];
+        const el = cellEl(mask, city);
+        if (el) el.classList.add('onroute');
+        mask = mask ^ (1<<city);
+      }
+      drawGraph({ route: step.route, mask:(1<<n)-1, curCity:-1 });
+      els.graphReadout.innerHTML = '<b class="hi-violet">Optimal tour found</b>: '+step.route.map(i=>LABELS[i]).join(' → ')+' — total distance <b class="hi-violet">'+step.total+'</b>.';
+    }
+
+    updateCounters();
+  }
+
+  function updateCounters(){
+    const total = steps.length;
+    els.stepCounter.innerHTML = 'Step <b>'+(stepIndex+1<=0?0:Math.min(stepIndex+1,total))+'</b> / '+total;
+    els.scrubber.max = Math.max(0,total-1);
+    els.scrubber.value = Math.max(0,stepIndex);
+    els.tableTag.textContent = countFilled()+' / '+totalValidCells+' filled';
+    els.prevBtn.disabled = stepIndex <= 0;
+    els.nextBtn.disabled = stepIndex >= total-1 || (practice.on && steps[stepIndex] && steps[stepIndex].type==='compute' && !practice.done.has(stepIndex));
+  }
+
+  /* ============================= Playback controls ============================= */
+  function goTo(idx){
+    if (practice.on && idx > stepIndex+1) return;
+    if (practice.on && idx > stepIndex && steps[stepIndex] && steps[stepIndex].type==='compute' && !practice.done.has(stepIndex)) return;
+    stepIndex = Math.max(-1, Math.min(idx, steps.length-1));
+    renderStep(stepIndex);
+  }
+  function next(){ if (stepIndex < steps.length-1) goTo(stepIndex+1); else pause(); }
+  function prev(){ if (stepIndex > -1) goTo(stepIndex-1); }
+  function play(){ if (practice.on) return;
+    if (playing) return;
+    playing = true;
+    els.playBtn.textContent = '⏸ Pause';
+    const speed = Number(els.speedSlider.value);
+    const delay = [null, 1100, 800, 520, 320, 160][speed];
+    timer = setInterval(()=>{
+      if (stepIndex >= steps.length-1){ pause(); return; }
+      next();
+    }, delay);
+  }
+  function pause(){
+    playing = false;
+    els.playBtn.textContent = '▶ Play';
+    if (timer){ clearInterval(timer); timer=null; }
+  }
+
+  /* ============================= Build / rebuild ============================= */
+  function rebuild(newSeed){
+    pause();
+    n = Number(els.citySelect.value);
+    if (newSeed) seed = Date.now() & 0xffffffff;
+    cities = genCities(n, seed);
+    dist = buildDist(cities);
+    const result = computeHeldKarp(n, dist);
+    steps = result.steps;
+    solved = result; setPractice(false); if (typeof renderCompare === 'function') renderCompare();
+    stepIndex = -1;
+    buildTableSkeleton();
+    els.graphTag.textContent = 'start = A · '+n+' cities';
+    resizeCanvas();
+    goTo(-1);
+  }
+
+  /* ============================= Wire up events ============================= */
+  els.regenBtn.addEventListener('click', ()=> rebuild(true));
+  els.solveBtn.addEventListener('click', ()=> rebuild(false));
+  els.citySelect.addEventListener('change', ()=> rebuild(true));
+  els.playBtn.addEventListener('click', ()=> playing ? pause() : play());
+  els.nextBtn.addEventListener('click', ()=>{ pause(); next(); });
+  els.prevBtn.addEventListener('click', ()=>{ pause(); prev(); });
+  els.resetBtn.addEventListener('click', ()=>{ pause(); goTo(-1); });
+  els.scrubber.addEventListener('input', ()=>{ pause(); goTo(Number(els.scrubber.value)); });
+  els.speedSlider.addEventListener('change', ()=>{ if (playing){ pause(); play(); } });
+  window.addEventListener('resize', ()=>{ resizeCanvas(); if (stepIndex>=0) renderStep(stepIndex); });
+
+  document.addEventListener('keydown', (e)=>{
+    if (e.target.tagName === 'INPUT' && e.target.type === 'number') return;
+    if (e.key === 'ArrowRight'){ pause(); next(); }
+    else if (e.key === 'ArrowLeft'){ pause(); prev(); }
+    else if (e.key === ' '){ e.preventDefault(); playing ? pause() : play(); }
+  });
+
+  // clicking a filled cell jumps the timeline to when it was computed
+  els.table.addEventListener('click', (e)=>{
+    const cell = e.target.closest('.dp-cell.filled');
+    if (!cell) return;
+    const mask = Number(cell.dataset.mask), city = Number(cell.dataset.city);
+    const idx = steps.findIndex(s => (s.type==='base' && mask===1 && city===0) || (s.type==='compute' && s.mask===mask && s.city===city));
+    if (idx >= 0){ pause(); goTo(idx); }
+  });
+
+  // brand bits decoration
+  (function(){
+    for (let i=0;i<5;i++){
+      const d = document.createElement('div');
+      d.className = 'brand-bit';
+      els.brandBits.appendChild(d);
+    }
+  })();
+
+  /* ============================= Explanations, matrix, practice ============================= */
+  const narrateEl = document.getElementById('narrate');
+  const practiceBtn = document.getElementById('practiceBtn');
+  const practiceBox = document.getElementById('practice') || (function(){ const d=document.createElement('div'); d.id='practice'; d.className='practice'; els.formulaBox.parentNode.appendChild(d); return d; })();
+  const practice = { on:false, done:new Set(), score:0, tried:0, streak:0, missed:false };
+
+  function narrate(s){
+    if (!s) return '';
+    if (s.type==='base') return 'We begin at <b>A</b> having visited only A, so the cost so far is <b>0</b>. This is the seed — every other table entry is built, step by step, from it.';
+    if (s.type==='compute'){
+      const S=maskSetLabel(s.mask), X=LABELS[s.city], P=maskSetLabel(s.mask^(1<<s.city)), bin=s.mask.toString(2).padStart(n,'0');
+      return '<b>Question:</b> what is the cheapest trip from A that visits exactly {'+S+'} (bitmask <code>'+bin+'</code>) and finishes at <b>'+X+'</b>?<br>'+
+        '<b>Idea:</b> the stop just before '+X+' must be one of {'+P+'}. For each choice we <i>reuse</i> a cost already in the table (best trip covering {'+P+'} ending there) and add the road to '+X+'.<br>'+
+        s.candidates.map(c=>'• via <b>'+LABELS[c.j]+'</b>: '+c.prevCost+' (already solved) + '+c.edgeCost+' (road '+LABELS[c.j]+'→'+X+') = '+c.total).join('<br>')+
+        '<br><b>Result:</b> '+LABELS[s.chosen]+' wins with <b>'+s.cost+'</b>'+(s.candidates.length===1?' (only one option, so nothing to compare)':'')+'. We store it so larger subsets can reuse it instead of recomputing.';
+    }
+    if (s.type==='close') return 'Every city is now visited, but a tour must <b>return to A</b>. For each possible final city we add the road back to A and keep the cheapest: <b>'+s.cost+'</b>, coming back from <b>'+LABELS[s.chosen]+'</b>.';
+    if (s.type==='route') return 'To recover the actual route, we walk backwards: from the winning last city, follow each cell\'s stored "came from" city until we reach A. Reading it forwards gives <b>'+s.route.map(i=>LABELS[i]).join(' → ')+'</b> with total distance <b>'+s.total+'</b>. Nothing was guessed — every step was the proven minimum of its subproblem.';
+    return '';
+  }
+
+  function renderMatrix(s){
+    const hi={}, hidden = practice.on && s && s.type==='compute' && !practice.done.has(stepIndex);
+    if (s && s.type==='compute') s.candidates.forEach(c=>{ hi[c.j+'_'+s.city] = (c.j===s.chosen && !hidden) ? 'w':'c'; });
+    let h='<table class="dm"><tr><th></th>'+LABELS.slice(0,n).map(l=>'<th>'+l+'</th>').join('')+'</tr>';
+    for (let i=0;i<n;i++){ h+='<tr><th>'+LABELS[i]+'</th>'; for (let j=0;j<n;j++) h+='<td class="'+(hi[i+'_'+j]||'')+'">'+(i===j?'·':dist[i][j])+'</td>'; h+='</tr>'; }
+    document.getElementById('distMatrix').innerHTML = h+'</table>';
+  }
+
+  function renderPractice(s, idx, hide){
+    if (!practice.on){ practiceBox.style.display='none'; return; }
+    practiceBox.style.display='block';
+    const stat='<div class="pstat">First-try score <b>'+practice.score+'</b> / '+practice.tried+' · streak <b>'+practice.streak+'</b></div>';
+    if (!s){ practiceBox.innerHTML = stat; return; }
+    if (!hide){
+      practiceBox.innerHTML = stat + (s.type==='route' ? '<b>Practice complete!</b> You got '+practice.score+' of '+practice.tried+' cells right on the first try.' : s.type==='compute' ? 'Revealed. Read the explanation above, then press <b>Next</b> for the next cell.' : 'Press <b>Next</b> to start the questions.');
+      return;
+    }
+    const X=LABELS[s.city], P=maskSetLabel(s.mask^(1<<s.city)), S=maskSetLabel(s.mask);
+    practiceBox.innerHTML = stat+'<b>Your turn:</b> what is <code>dp[{'+S+'}]['+X+']</code>? For each possible previous stop add <i>dp value + road</i>, then take the smallest.<br>'+
+      s.candidates.map(c=>'• via '+LABELS[c.j]+': dp[{'+P+'}]['+LABELS[c.j]+'] = <b>'+c.prevCost+'</b>, road '+LABELS[c.j]+'→'+X+' = <b>'+c.edgeCost+'</b>').join('<br>')+
+      '<br><input type="number" id="pAns" placeholder="?"> <button class="btn primary" id="pCheck">Check</button> <button class="btn" id="pHint">Hint</button> <button class="btn" id="pShow">Show answer</button><div class="pfb" id="pFb"></div>';
+    const inp=document.getElementById('pAns'), fb=document.getElementById('pFb');
+    const finish=(good)=>{ practice.tried++; if (good){ practice.score++; practice.streak++; } else practice.streak=0; practice.missed=false; practice.done.add(idx); renderStep(idx); };
+    const check=()=>{ const v=parseInt(inp.value,10); if (isNaN(v)) return;
+      if (v===s.cost){ finish(!practice.missed); } else { practice.missed=true; fb.className='pfb bad'; fb.textContent = v<s.cost ? 'Too low — did you pick the smallest total, or just a smaller piece? Each option is dp value + road.' : 'Too high — compare every option; the minimum may be a different previous stop.'; } };
+    document.getElementById('pCheck').onclick=check;
+    inp.addEventListener('keydown',e=>{ if (e.key==='Enter') check(); });
+    document.getElementById('pHint').onclick=()=>{ practice.missed=true; fb.className='pfb ok'; fb.textContent='Totals: '+s.candidates.map(c=>LABELS[c.j]+' → '+c.total).join(', ')+'. Now pick the smallest.'; };
+    document.getElementById('pShow').onclick=()=>finish(false);
+    inp.focus();
+  }
+
+  function setPractice(on){
+    practice.on=on; practice.done=new Set(); practice.score=0; practice.tried=0; practice.streak=0; practice.missed=false;
+    practiceBtn.textContent = on ? '✓ Practice mode' : '✎ Practice mode';
+    practiceBtn.classList.toggle('primary', on);
+    els.scrubber.disabled = on; els.playBtn.disabled = on;
+    if (!on) practiceBox.style.display='none';
+    if (!steps.length) return;
+    pause();
+    goTo(-1);
+    if (on) goTo(0);
+    if (typeof syncSeg === 'function') syncSeg();
+  }
+  practiceBtn.addEventListener('click', ()=> setPractice(!practice.on));
+
+  /* ============================= Taskbar & tools ============================= */
+  const tb = id => document.getElementById(id);
+  (function(){
+    tb('tbMap').append(els.citySelect.parentNode, els.regenBtn, els.solveBtn, practiceBtn);
+    practiceBtn.style.display = 'none';
+    const cfg = document.querySelector('.config'); if (cfg) cfg.remove();
+  })();
+  function syncSeg(){ tb('modeLearn').classList.toggle('on', !practice.on); tb('modePractice').classList.toggle('on', practice.on); }
+  tb('modeLearn').onclick = ()=>{ if (practice.on) setPractice(false); };
+  tb('modePractice').onclick = ()=>{ if (!practice.on) setPractice(true); };
+  [['vExplain','hide-explain'],['vFormula','hide-formula'],['vMatrix','hide-matrix']].forEach(([id,cls])=>{
+    tb(id).onchange = e => document.body.classList.toggle(cls, !e.target.checked);
+  });
+
+  function greedy(){
+    const seen = new Set([0]); let cur = 0, c = 0; const r = [0];
+    while (seen.size < n){ let b = -1; for (let i=0;i<n;i++) if (!seen.has(i) && (b<0 || dist[cur][i] < dist[cur][b])) b = i; seen.add(b); c += dist[cur][b]; cur = b; r.push(b); }
+    c += dist[cur][0]; r.push(0); return { r, c };
+  }
+  function factorial(k){ let f=1; for (let i=2;i<=k;i++) f*=i; return f; }
+  const fmtN = v => v >= 1e6 ? v.toExponential(2) : v.toLocaleString();
+  function stats(){
+    const ops = steps.filter(s=>s.type==='compute'||s.type==='close').reduce((a,s)=>a+s.candidates.length,0);
+    return { ops, routes: factorial(n-1), g: greedy() };
+  }
+  function renderCompare(){
+    const body = tb('cmpBody'); if (!body || !steps.length) return;
+    const st = stats(), gap = Math.round((st.g.c - solved.total) / solved.total * 100);
+    let rows = '';
+    [4,6,8,10,12,15,20].forEach(k=>{ const bf = factorial(k-1), dp = k*k*Math.pow(2,k); rows += '<tr><td>'+k+'</td><td>'+fmtN(bf)+'</td><td>'+fmtN(dp)+'</td><td>'+(bf/dp>=10 ? Math.round(bf/dp).toLocaleString()+'×' : (bf/dp).toFixed(1)+'×')+'</td></tr>'; });
+    body.innerHTML = '<div class="cmp-grid"><div>'+
+      '<b>This map ('+n+' cities)</b><br>Brute-force routes to check: <b>(n−1)! = '+fmtN(st.routes)+'</b><br>DP table cells filled: <b>'+totalValidCells+'</b><br>DP transitions actually evaluated: <b>'+st.ops+'</b><br>'+
+      'Greedy nearest-neighbour: <b>'+st.g.r.map(i=>LABELS[i]).join('→')+'</b> = '+st.g.c+(gap>0 ? ' (<b>'+gap+'% longer</b> than optimal '+solved.total+')' : ' (matches the optimum here — try New map)')+'<br>'+
+      'Memory: brute force O(n), DP O(n· 2ⁿ) — DP spends space to save time.</div>'+
+      '<div><table class="dm" style="width:100%"><tr><th>n</th><th>(n−1)! routes</th><th>n²·2ⁿ DP ops</th><th>DP advantage</th></tr>'+rows+'</table></div></div>';
+  }
+  tb('cmpBtn').onclick = ()=>{ const p = tb('cmpPanel'), show = p.style.display === 'none'; p.style.display = show ? 'block' : 'none'; tb('cmpBtn').classList.toggle('primary', show); if (show) renderCompare(); };
+  tb('helpBtn').onclick = ()=>{ const h = tb('helpBar'); h.style.display = h.style.display === 'none' ? 'block' : 'none'; };
+  tb('copyBtn').onclick = async ()=>{
+    const st = stats();
+    const txt = 'Held-Karp TSP — '+n+' cities\nOptimal tour: '+solved.route.map(i=>LABELS[i]).join(' -> ')+' (distance '+solved.total+')\nDP table cells: '+totalValidCells+', transitions evaluated: '+st.ops+'\nBrute force would check (n-1)! = '+fmtN(st.routes)+' routes\nGreedy nearest-neighbour: '+st.g.c+' ('+st.g.r.map(i=>LABELS[i]).join(' -> ')+')';
+    let ok = false;
+    try { await navigator.clipboard.writeText(txt); ok = true; }
+    catch(e){ const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select(); try { ok = document.execCommand('copy'); } catch(_){} t.remove(); }
+    const b = tb('copyBtn'), old = b.textContent; b.textContent = ok ? '✓ Copied' : 'Copy blocked'; setTimeout(()=>{ b.textContent = old; }, 1500);
+  };
+
+  /* ============================= Init ============================= */
+  rebuild(false);
+})();
+</script>
+</body>
+</html>
